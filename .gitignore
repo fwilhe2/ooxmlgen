@@ -1,3 +1,8 @@
 bin/
 obj/
-*xlsx
+
+# The corpus is generated, never edited: this program is its source. Regenerate it with
+# `dotnet run -- --out <dir>` and vendor the output into whatever consumes it.
+corpus/
+*.xlsx
+*.xlsm

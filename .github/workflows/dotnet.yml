@@ -21,5 +21,23 @@ jobs:
       run: dotnet restore
     - name: Build
       run: dotnet build --no-restore
-    - name: Test
-      run: dotnet run
+    - name: Generate the corpus
+      run: dotnet run --no-build -- --out corpus
+
+    # The generator is the only thing that writes these files, so "it still runs" is a weak
+    # claim on its own. These two check that what it wrote is what it said it wrote.
+    - name: Check the corpus against its own manifest
+      run: python3 scripts/check-corpus.py corpus
+
+    - name: Check that LibreOffice can open what should open
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends libreoffice-calc
+        python3 scripts/check-with-libreoffice.py corpus
+
+    - name: Upload the corpus
+      uses: actions/upload-artifact@v4
+      with:
+        name: xlsx-corpus
+        path: corpus/
+        retention-days: 30

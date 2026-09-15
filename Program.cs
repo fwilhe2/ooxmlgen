@@ -1,131 +1,124 @@
-﻿using System;
-using System.Linq;
-using DocumentFormat.OpenXml;
-using DocumentFormat.OpenXml.Packaging;
-using DocumentFormat.OpenXml.Spreadsheet;
+using OoxmlGen;
+using OoxmlGen.Families;
 
-namespace OpenXmlTesting
+namespace OoxmlGen;
+
+/// <summary>
+/// Generates a corpus of Excel workbooks for testing an importer against.
+///
+/// Every fixture is small, named for the construct it exercises, and paired with an entry in
+/// <c>manifest.json</c> stating both what the file contains and what a conversion of it
+/// should produce. Files are never hand-edited: this program is the source.
+/// </summary>
+public static class Program
 {
-    class Program
+    public const string Version = "0.2.0";
+
+    /// <summary>
+    /// The families, in the order they are generated. The names are what <c>--only</c> and
+    /// <c>--skip</c> take.
+    /// </summary>
+    static readonly (string Name, string Summary, Action<Corpus> Run)[] Families =
+    [
+        ("values", "X1 — cell types, numbers, strings, the two date systems", Values.Generate),
+        ("formulas", "X2 — expressions, shared groups, and the excluded classes", Formulas.Generate),
+        ("numfmt", "X3 — built-in ids, custom codes, sections, currency, elapsed time", NumberFormats.Generate),
+        ("styles", "X4 — fonts, colours, fills, borders, alignment, named styles", CellStyles.Generate),
+        ("geometry", "X4 — column widths, row heights, hidden and outlined tracks", Geometry.Generate),
+        ("document", "X5 — names, sheets, merges, filters, and the parts that get dropped", DocumentLevel.Generate),
+        ("realworld", "X0 — what real producers write that the spec permits and nobody expects", RealWorld.Generate),
+        ("hostile", "X0 — files that are trying to break the reader", Hostile.Generate),
+        ("scale", "X1 — one large workbook, for the timing test", Scale.Generate),
+    ];
+
+    public static int Main(string[] args)
     {
-        static void Main(string[] args)
-        {
-            string filePath = "ComplexTestDocument.xlsx";
-            CreateComplexExcelFile(filePath);
-            Console.WriteLine($"Created complex testing file at: {filePath}");
-        }
+        string output = Path.Combine(Directory.GetCurrentDirectory(), "corpus");
+        var only = new List<string>();
+        var skip = new List<string>();
+        bool clean = true;
 
-        public static void CreateComplexExcelFile(string filepath)
+        for (int i = 0; i < args.Length; i++)
         {
-            using (SpreadsheetDocument document = SpreadsheetDocument.Create(filepath, SpreadsheetDocumentType.Workbook))
+            switch (args[i])
             {
-                // 1. Setup Workbook
-                WorkbookPart workbookPart = document.AddWorkbookPart();
-                workbookPart.Workbook = new Workbook();
-                Sheets sheets = document.WorkbookPart.Workbook.AppendChild(new Sheets());
-
-                // 2. Add Stylesheet (Required for dates and formatting)
-                WorkbookStylesPart stylesPart = workbookPart.AddNewPart<WorkbookStylesPart>();
-                stylesPart.Stylesheet = CreateStylesheet();
-                stylesPart.Stylesheet.Save();
-
-                // 3. Add Shared String Table (How Excel actually stores text)
-                SharedStringTablePart shareStringPart = workbookPart.AddNewPart<SharedStringTablePart>();
-                shareStringPart.SharedStringTable = new SharedStringTable();
-
-                // 4. Create Sheet 1: Data Types
-                WorksheetPart worksheetPart1 = workbookPart.AddNewPart<WorksheetPart>();
-                worksheetPart1.Worksheet = new Worksheet(new SheetData());
-                Sheet sheet1 = new Sheet() { Id = workbookPart.GetIdOfPart(worksheetPart1), SheetId = 1, Name = "DataTypes" };
-                sheets.Append(sheet1);
-
-                // 5. Create Sheet 2: Styles
-                WorksheetPart worksheetPart2 = workbookPart.AddNewPart<WorksheetPart>();
-                worksheetPart2.Worksheet = new Worksheet(new SheetData());
-                Sheet sheet2 = new Sheet() { Id = workbookPart.GetIdOfPart(worksheetPart2), SheetId = 2, Name = "StyledSheet" };
-                sheets.Append(sheet2);
-
-                // --- POPULATE SHEET 1 (Different Data Types) ---
-                SheetData sheetData1 = worksheetPart1.Worksheet.GetFirstChild<SheetData>();
-                Row row1 = new Row() { RowIndex = 1 };
-
-                // A1: Shared String
-                int stringIndex = InsertSharedStringItem("Hello Shared String", shareStringPart);
-                row1.Append(CreateCell("A1", stringIndex.ToString(), CellValues.SharedString, 0));
-
-                // B1: Number (Notice no specific CellValues type is needed for standard numbers)
-                row1.Append(CreateCell("B1", "42.5", CellValues.Number, 0));
-
-                // C1: Boolean (0 = False, 1 = True)
-                row1.Append(CreateCell("C1", "1", CellValues.Boolean, 0));
-
-                // D1: Date (Stored as a number, formatted as a date via StyleIndex 1)
-                double excelDate = DateTime.Now.ToOADate();
-                row1.Append(CreateCell("D1", excelDate.ToString(), CellValues.Number, 1));
-
-                sheetData1.Append(row1);
-
-                // --- POPULATE SHEET 2 (Styles) ---
-                SheetData sheetData2 = worksheetPart2.Worksheet.GetFirstChild<SheetData>();
-                Row row2 = new Row() { RowIndex = 1 };
-
-                // A1: Bold Text with Yellow Fill (StyleIndex 2)
-                int styleStringIndex = InsertSharedStringItem("Important Data!", shareStringPart);
-                row2.Append(CreateCell("A1", styleStringIndex.ToString(), CellValues.SharedString, 2));
-
-                sheetData2.Append(row2);
-
-                // Save all changes
-                workbookPart.Workbook.Save();
+                case "--out" or "-o" when i + 1 < args.Length:
+                    output = Path.GetFullPath(args[++i]);
+                    break;
+                case "--only" when i + 1 < args.Length:
+                    only.AddRange(args[++i].Split(',', StringSplitOptions.RemoveEmptyEntries));
+                    break;
+                case "--skip" when i + 1 < args.Length:
+                    skip.AddRange(args[++i].Split(',', StringSplitOptions.RemoveEmptyEntries));
+                    break;
+                case "--no-clean":
+                    clean = false;
+                    break;
+                case "--list":
+                    foreach ((string name, string summary, _) in Families)
+                        Console.WriteLine($"  {name,-11} {summary}");
+                    return 0;
+                case "--help" or "-h":
+                    Usage();
+                    return 0;
+                default:
+                    Console.Error.WriteLine($"ooxmlgen: unknown argument '{args[i]}'");
+                    Usage();
+                    return 2;
             }
         }
 
-        // --- HELPER METHODS ---
-
-        // Creates a basic cell
-        private static Cell CreateCell(string reference, string value, CellValues dataType, uint styleIndex)
+        foreach (string name in only.Concat(skip))
         {
-            Cell cell = new Cell() { CellReference = reference, DataType = dataType, StyleIndex = styleIndex };
-            cell.CellValue = new CellValue(value);
-            return cell;
-        }
-
-        // Inserts a string into the SharedStringTable and returns its index
-        private static int InsertSharedStringItem(string text, SharedStringTablePart shareStringPart)
-        {
-            int i = 0;
-            foreach (SharedStringItem item in shareStringPart.SharedStringTable.Elements<SharedStringItem>())
+            if (!Array.Exists(Families, f => f.Name == name))
             {
-                if (item.InnerText == text) return i;
-                i++;
+                Console.Error.WriteLine($"ooxmlgen: no such family '{name}' — try --list");
+                return 2;
             }
-            shareStringPart.SharedStringTable.AppendChild(new SharedStringItem(new Text(text)));
-            shareStringPart.SharedStringTable.Save();
-            return i;
         }
 
-        // Generates a minimal valid Stylesheet with custom styles
-        private static Stylesheet CreateStylesheet()
+        var selected = Families
+            .Where(f => (only.Count == 0 || only.Contains(f.Name)) && !skip.Contains(f.Name))
+            .ToArray();
+
+        if (clean && Directory.Exists(output)) Directory.Delete(output, recursive: true);
+        Directory.CreateDirectory(output);
+
+        var corpus = new Corpus(output);
+        foreach ((string name, _, Action<Corpus> run) in selected)
         {
-            return new Stylesheet(
-                new Fonts(
-                    new Font(), // Index 0 - Default
-                    new Font(new Bold()) // Index 1 - Bold
-                ),
-                new Fills(
-                    new Fill(new PatternFill() { PatternType = PatternValues.None }), // Index 0 - Default
-                    new Fill(new PatternFill() { PatternType = PatternValues.Gray125 }), // Index 1 - Required by Excel
-                    new Fill(new PatternFill(new ForegroundColor { Rgb = new HexBinaryValue() { Value = "FFFFFF00" } }) { PatternType = PatternValues.Solid }) // Index 2 - Yellow Fill
-                ),
-                new Borders(
-                    new Border() // Index 0 - Default
-                ),
-                new CellFormats(
-                    new CellFormat() { FontId = 0, FillId = 0, BorderId = 0 }, // Index 0: Default Style
-                    new CellFormat() { FontId = 0, FillId = 0, BorderId = 0, NumberFormatId = 14, ApplyNumberFormat = true }, // Index 1: Date Format (14 is built-in m/d/yyyy)
-                    new CellFormat() { FontId = 1, FillId = 2, BorderId = 0, ApplyFont = true, ApplyFill = true } // Index 2: Bold + Yellow Fill
-                )
-            );
+            Console.WriteLine($"{name}/");
+            run(corpus);
         }
+
+        corpus.WriteManifest(Version);
+
+        long bytes = corpus.Fixtures.Sum(f => f.Bytes);
+        int cells = corpus.Fixtures.Sum(f => f.Sheets.Sum(s => s.Cells.Count));
+        Console.WriteLine();
+        Console.WriteLine($"{corpus.Fixtures.Count} fixtures, {cells} asserted cells, " +
+                          $"{bytes / 1024.0 / 1024.0:0.#} MiB → {output}");
+        Console.WriteLine($"manifest: {Path.Combine(output, "manifest.json")}");
+        return 0;
+    }
+
+    static void Usage()
+    {
+        Console.WriteLine("""
+            ooxmlgen — generate a corpus of Excel workbooks for testing an importer
+
+            usage: dotnet run -- [options]
+
+              -o, --out <dir>     where to write the corpus (default: ./corpus)
+                  --only <a,b>    generate only these families
+                  --skip <a,b>    generate everything but these families
+                  --no-clean      keep whatever is already in the output directory
+                  --list          list the families and what each covers
+              -h, --help          this
+
+            The output directory gets one subdirectory per family, a manifest.json stating what
+            every file contains and what a conversion of it should produce, and a README.md
+            listing the lot.
+            """);
     }
 }
