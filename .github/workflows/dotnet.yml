@@ -36,7 +36,7 @@ jobs:
         python3 scripts/check-with-libreoffice.py corpus
 
     - name: Upload the corpus
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: xlsx-corpus
         path: corpus/
