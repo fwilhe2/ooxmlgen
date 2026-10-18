@@ -29,6 +29,7 @@ public static class Program
         ("realworld", "X0 — what real producers write that the spec permits and nobody expects", RealWorld.Generate),
         ("hostile", "X0 — files that are trying to break the reader", Hostile.Generate),
         ("scale", "X1 — one large workbook, for the timing test", Scale.Generate),
+        ("functions", "X2 — every function grind implements, on realistic data (from odsgen)", Functions.Generate),
     ];
 
     public static int Main(string[] args)
@@ -50,6 +51,9 @@ public static class Program
                     break;
                 case "--skip" when i + 1 < args.Length:
                     skip.AddRange(args[++i].Split(',', StringSplitOptions.RemoveEmptyEntries));
+                    break;
+                case "--function-samples" when i + 1 < args.Length:
+                    Functions.SamplesPath = Path.GetFullPath(args[++i]);
                     break;
                 case "--no-clean":
                     clean = false;
@@ -113,6 +117,9 @@ public static class Program
                   --only <a,b>    generate only these families
                   --skip <a,b>    generate everything but these families
                   --no-clean      keep whatever is already in the output directory
+                  --function-samples <file>
+                                      odsgen's functions/samples.json, which the functions family
+                                      is built from (default: ../odsgen/functions/samples.json)
                   --list          list the families and what each covers
               -h, --help          this
 

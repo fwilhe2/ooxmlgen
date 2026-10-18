@@ -26,6 +26,9 @@ dotnet run -- --out corpus
       --only <a,b>    generate only these families
       --skip <a,b>    generate everything but these families
       --no-clean      keep whatever is already in the output directory
+      --function-samples <file>
+                          odsgen's functions/samples.json, which the functions family
+                          is built from (default: ../odsgen/functions/samples.json)
       --list          list the families and what each covers
 ```
 
@@ -35,7 +38,7 @@ and `corpus/` is in `.gitignore`. Vendor the output into whatever consumes it.
 
 ## What it generates
 
-76 fixtures, about 5 MiB, in nine families. Each file exercises one construct and is named
+86 fixtures, about 5 MiB, in ten families. Each file exercises one construct and is named
 for it, so a failure names its own cause.
 
 | Family | | |
@@ -49,6 +52,7 @@ for it, so a failure names its own cause.
 | `realworld/` | X0 | implicit `r`, `mc:AlternateContent`, Strict and mixed namespaces, `xml:space`, lying counts, awkward part targets, BOMs, odd packaging |
 | `hostile/` | X0 | zip bomb, ten thousand parts, billion laughs, XXE, zip slip, CFB-encrypted, truncated, deeply nested |
 | `scale/` | X1 | half a million cells, and six cells at the far corners of a sheet |
+| `functions/` | X2 | every function grind implements, on realistic data — built from [odsgen](https://github.com/fwilhe2/odsgen)'s function samples, with LibreOffice's answers as the cached values |
 
 ## The manifest
 
