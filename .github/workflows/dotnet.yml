@@ -19,6 +19,9 @@ jobs:
         dotnet-version: 10.0.x
     - name: Restore dependencies
       run: dotnet restore
+
+    - run: git clone https://github.com/fwilhe2/odsgen ../odsgen
+
     - name: Build
       run: dotnet build --no-restore
     - name: Generate the corpus
